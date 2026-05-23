@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Мессенджер</title>
+    <style>
+      /* Сброс и базовые стили (Мобильный интерфейс) */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #0f172a; /* Темный фон как в Telegram */
+        color: #f8fafc;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .app-container {
+        width: 100%;
+        max-width: 400px; /* Ограничиваем ширину для телефонов */
+        background-color: #1e293b;
+        border-radius: 20px;
+        padding: 30px 20px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      }
+
+      h1 { text-align: center; margin-bottom: 25px; font-size: 24px; }
+      
+      .subtitle { 
+        text-align: center; color: #94a3b8; font-size: 14px; margin-bottom: 20px; 
+      }
+
+      input {
+        width: 100%;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: #334155;
+        border: 1px solid #475569;
+        border-radius: 12px;
+        color: white;
+        font-size: 16px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      input:focus { border-color: #3b82f6; }
+      input::placeholder { color: #64748b; }
+
+      /* Специальный инпут для кода */
+      .code-input {
+        text-align: center;
+        font-size: 28px;
+        letter-spacing: 10px;
+        font-weight: bold;
+      }
+
+      button {
+        width: 100%;
+        padding: 15px;
+        background-color: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        margin-top: 10px;
+      }
+      button:hover { background-color: #2563eb; }
+      button:disabled { background-color: #475569; cursor: not-allowed; }
+
+      .error-msg {
+        color: #f87171;
+        text-align: center;
+        font-size: 14px;
+        margin-bottom: 15px;
+        min-height: 20px;
+      }
+
+      .back-link {
+        display: block;
+        text-align: center;
+        margin-top: 20px;
+        color: #64748b;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- React и Firebase через CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <script>
+      // Инициализация Firebase
+      const firebaseConfig = {
+        apiKey: "AIzaSyBX4UEgA_jYR1bW3dO1nm2FgWVbWKQCtJ4",
+        authDomain: "my-messenger-app-66a89.firebaseapp.com",
+        databaseURL: "https://my-messenger-app-66a89-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "my-messenger-app-66a89",
+        storageBucket: "my-messenger-app-66a89.firebasestorage.app",
+        messagingSenderId: "498516241258",
+        appId: "1:498516241258:web:ff479da13d40d696681313"
+      };
+      const app = firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+
+      const { useState } = React;
+
+      function App() {
+        const [step, setStep] = useState('form'); // 'form' или 'code'
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState('');
+
+        const [email, setEmail] = useState('');
+        const [name, setName] = useState('');
+        const [username, setUsername] = useState('');
+        const [code, setCode] = useState('');
+
+        // Шаг 1: Отправка кода на Vercel API
+        const handleSendCode = async (e) => {
+          e.preventDefault();
+          setLoading(true);
+          setError('');
+
+          try {
+            const res = await fetch('/api/send-code', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, name, username })
+            });
+            const data = await res.json();
+            
+            if (data.error) {
+              setError(data.error);
+            } else {
+              setStep('code');
+            }
+          } catch (err) {
+            setError('Ошибка сети. Попробуйте позже.');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        // Шаг 2: Проверка кода и создание аккаунта через Vercel API
+        const handleVerify = async (e) => {
+          e.preventDefault();
+          setLoading(true);
+          setError('');
+
+          try {
+            const res = await fetch('/api/verify-and-register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, code })
+            });
+            const data = await res.json();
+            
+            if (data.error) {
+              setError(data.error);
+            } else {
+              // Сохраняем профиль в Firebase Realtime DB
+              await db.ref('users/' + data.localId).set({
+                name: data.name,
+                username: data.username,
+                email: email
+              });
+              alert('Регистрация прошла успешно!');
+              // Здесь потом сделаем переход в чат
+            }
+          } catch (err) {
+            setError('Ошибка сети.');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        return (
+          <div className="app-container">
+            <h1>Мессенджер</h1>
+            
+            <div className="error-msg">{error}</div>
+
+            {step === 'form' ? (
+              <form onSubmit={handleSendCode}>
+                <div className="subtitle">Введите данные для регистрации</div>
+                <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
+                <input type="text" placeholder="Имя" value={name} onChange={e => setName(e.target.value)} required />
+                <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
+                <button type="submit" disabled={loading}>
+                  {loading ? 'Отправка...' : 'Получить код'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerify}>
+                <div className="subtitle">Мы отправили код на {email}</div>
+                <input 
+                  type="text" 
+                  className="code-input"
+                  placeholder="------" 
+                  value={code} 
+                  onChange={e => setCode(e.target.value)} 
+                  required 
+                  maxLength={6} 
+                />
+                <button type="submit" disabled={loading}>
+                  {loading ? 'Проверка...' : 'Подтвердить'}
+                </button>
+                <span className="back-link" onClick={() => { setStep('form'); setError(''); }}>
+                  Изменить данные
+                </span>
+              </form>
+            )}
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(React.createElement(App));
+    </script>
+  </body>
+</html>
